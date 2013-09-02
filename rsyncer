@@ -94,7 +94,10 @@ def main():
 		command_name = argv[2]
 		if not COMMANDS.has_key(command_name):
 			raise CommandNotAvailableException('%r is not a valid command' % command_name, command_name)
-		command = COMMANDS[command_name](config)
+		try:
+			command = COMMANDS[command_name](config)
+		except MissingConfigKeyException, exc:
+			raise CommandNotAvailableException('command %r not available because %s' % (command_name, exc), command_name)
 		command.run()
 		exit(command.returncode)
 
@@ -147,18 +150,20 @@ class Program:
 		return self.replace_config_vars(key)
 
 	def replace_config_vars(self, key, tried=None):
-		if not self.config[key]: return self.config[key]
+		val = self.config[key]
+		if not val or type(val) == list: return val
+
 		if tried == None: tried = []
 		elif key in tried: raise ValueError('the following options reference each other: ' + ', '.join(tried))
 		tried.append(key)
+
 		from os.path import expanduser
-		string = self.config[key]
 		for var in self.config:
 			search = '$'+var
-			if string.find(search) != -1:
-				string = string.replace(search, self.replace_config_vars(var, tried))
-		string = string.replace('\\$', '$').replace('\\\\', '\\')
-		return expanduser(string)
+			if val.find(search) != -1:
+				val = val.replace(search, self.replace_config_vars(var, tried))
+		val = val.replace('\\$', '$').replace('\\\\', '\\')
+		return expanduser(val)
 
 
 class Rsync(Program):
@@ -180,12 +185,16 @@ class Rsync(Program):
 class Push(Rsync):
 	def __init__(self, config):
 		self.init_rsync(config)
+		if config.has_key('disable-push') and config['disable-push']:
+			raise CommandNotAvailableException('pushing disabled by configuration', 'push')
 		self.append(self.get_local() + '/')
 		self.append(self.get_remote())
 
 class Pull(Rsync):
 	def __init__(self, config):
 		self.init_rsync(config)
+		if config.has_key('disable-pull') and config['disable-pull']:
+			raise CommandNotAvailableException('pulling disabled by configuration', 'pull')
 		self.append(self.get_remote() + '/')
 		self.append(self.get_local())
 
