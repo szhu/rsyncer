@@ -1,0 +1,182 @@
+#!/usr/bin/env python
+
+# usage:
+#   python run <level> <options>
+# or make this file executable and:
+#   ./run  <level> <options>
+
+# Python 2.6+ & 3 compatibility (you can run this script with either)
+from __future__ import print_function
+if hasattr(__builtins__, 'raw_input'): input = __builtins__.raw_input
+
+# Options
+CONFIG_DIR = "~/.config/"
+DEFAULT_CONFIG = {
+	'single_letter_options': 'rvut',
+	'rsync_path': None,
+	'exclude_from': None,
+	'local': None,
+	'remote': None
+}
+
+# system #
+
+def printe(*objects, **kwargs):
+	from sys import stderr
+	print(*objects, file=stderr, **kwargs)
+
+def add_sigint_support():
+	# An attempt to add Windows support for ^C. Doesn't work though.
+	# from http://stackoverflow.com/a/1112363
+	from signal import signal, SIGINT
+	def raiseKeyboardInterrupt(signum, frame): raise KeyboardInterrupt()
+	signal(SIGINT, raiseKeyboardInterrupt)
+
+def add_timelimit_support():
+	# from http://stackoverflow.com/a/4033997/782045
+	from signal import signal, SIGALRM
+	def raiseAlarmInterrupt(signum, frame): raise AlarmInterrupt()
+	signal(SIGALRM, raiseAlarmInterrupt)
+
+# config #
+
+def make_config_dir():
+	from os import makedirs
+	from os.path import expanduser
+	makedirs(expanduser(CONFIG_DIR))
+
+def get_config_filename(name):
+	from os.path import expanduser, join
+	return join(expanduser(CONFIG_DIR), name)
+
+def get_config(name):
+	from json import loads
+	with open(get_config_filename(name)) as f:
+		return dict(DEFAULT_CONFIG).update(loads(f.read()))
+
+def replace_config_vars(string, config):
+	from os.path import expanduser
+	for var in config:
+		string = string.replace('$'+var, config[var])
+	string = string.replace('\\$', '$').replace('\\\\', '\\')
+	return expanduser(string)
+
+# main #
+
+def main():
+	add_sigint_support()
+	add_timelimit_support()
+
+	from sys import argv, exit
+
+	try:
+		config_name = argv[1]
+		config = get_config(config_name)
+		command_name = argv[2]
+		command = COMMANDS[command_name](config)
+		command.run()
+		exit(command.returncode)
+
+	except KeyboardInterrupt:
+		printe()
+	except EOFError:
+		printe()
+
+# programs #
+
+class Program:
+	def __init__(self, args):
+		self.command = args
+		self.returncode = None
+
+	def run(self):
+		from subprocess import Popen
+		try:
+			process = Popen(self.command, universal_newlines=True)
+			process.wait()
+		finally:
+			try:
+				if process.returncode is None: process.kill()
+			except (OSError, NameError): pass
+		self.returncode = process.returncode
+
+class ProgramBuilder(Program):
+	def __init__(self, args, config):
+		self.command = args
+		self.config = config
+
+	def append_from_config(self, key, *args, **kwargs):
+		self.append(self.get_key(key), *args, **kwargs)
+
+	def append(self, val, prefix='', suffix='', prefix_arg=None, suffix_arg=None, quote_val=False):
+		if val: 
+			if quote_val: val = '"' + val.replace('"', '\\"') + '"'
+			if prefix_arg: self.command.append(prefix_arg)
+			self.command.append(prefix + val + suffix)
+			if suffix_arg: self.command.append(suffix_arg)
+
+	def check_key(self, key):
+		if not self.config[key]:
+			raise CommandNotAvailableException('This command is not supported by this configuration because %s is unset.' %key, key)
+
+	def get_key(self, key):
+		self.check_key(key)
+		return replace_config_vars(self.config[key], self.config)
+
+
+class Rsync(ProgramBuilder):
+	def __init__(self, config, first, second):
+		ProgramBuilder.__init__(self, ['rsync'], config)
+		self.check_key('local')
+		self.check_key('remote')
+		self.append_from_config('single_letter_options', prefix='-')
+		self.append_from_config('rsync_path', prefix_arg='--rsync-path')
+		self.append_from_config('exclude_from', prefix_arg='--exclude-from')
+		self.append(first)
+		self.append(second)
+
+	def get_remote(self):
+		return self.get_key('host') + ':' + self.get_key('remote')
+
+	def get_local(self):
+		return self.get_key('local') + '/'
+
+class Push(Rsync):
+	def __init__(self, config):
+		Rsync.__init__(config, self.get_local(), self.get_remote())
+
+class Pull(Rsync):
+	def __init__(self, config):
+		Rsync.__init__(config, self.get_remote(), self.get_local())
+
+class Ssh(ProgramBuilder):
+	def __init__(self, config):
+		ProgramBuilder.__init__(self, ['ssh'], config)
+		self.append_from_config('host')
+
+class Pwd(ProgramBuilder):
+	def __init__(self, config):
+		ProgramBuilder.__init__(self, None, config)
+		self.config = config
+
+	def run(self):
+		print(self.get_key('local'))
+		self.returncode = 0
+
+COMMANDS = {
+	'ssh': Ssh,
+	'push': Push,
+	'pull': Pull,
+	'pwd': Pwd,
+}
+
+# exceptions #
+
+class CommandNotAvailableException(Exception):
+	def __init__(self, msg, key, *args, **kwargs):
+		self.key = key
+		Exception.__init__(self, msg, *args, **kwargs)
+
+class AlarmInterrupt(Exception): pass
+
+if __name__ == "__main__": main()
