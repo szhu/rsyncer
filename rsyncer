@@ -12,7 +12,8 @@ DEFAULT_CONFIG = {
 	'rsync-path': None,
 	'exclude-from': None,
 	'local': None,
-	'remote': None
+	'remote': None,
+	'command': 'ssh'
 }
 
 # system #
@@ -109,14 +110,14 @@ def main():
 	from sys import argv, exit
 
 	try:
-		if len(argv) not in (2,3):
-			printe("usage: %s config [command]" % argv[0])
+		if len(argv) < 2:
+			printe("usage: %s config [command [options]]" % argv[0])
 			exit(1)
 		main_config = get_main_config()
 		config_name = argv[1]
 		config = get_config(config_name, main_config)
-		if len(argv) > 2: command_name = argv[2]
-		else: command_name = 'ssh'
+		command_name = argv[2] if len(argv) > 2 else config['command']
+		config['_options'] = argv[3:] if len(argv) > 3 else []
 		if command_name not in COMMANDS:
 			raise CommandNotAvailableError('%r is not a valid command' % command_name, command_name)
 		try:
@@ -205,6 +206,7 @@ class programs:
 			self.append_from_config('rsync-path', prefix_arg='--rsync-path')
 			self.append_from_config('exclude-from', prefix_arg='--exclude-from')
 			for arg in self.get_key('rsync-double'): self.append(arg)
+			for arg in self.get_key('_options'): self.append(arg)
 
 		def get_remote(self): return self.get_key('remote', required=True)
 		def get_local(self): return self.get_key('local', required=True)
@@ -229,6 +231,7 @@ class programs:
 		def __init__(self, config):
 			self.init_program(['ssh'], config)
 			self.append_from_config('host')
+			for arg in self.get_key('_options'): self.append(arg)
 
 	class pwd(generic):
 		def __init__(self, config):
