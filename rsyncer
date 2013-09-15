@@ -151,7 +151,7 @@ class programs:
 		def run(self):
 			from subprocess import Popen
 			try:
-				printe(' '.join([arg if arg.find(' ') == -1 else "'"+arg+"'" for arg in self.command]))
+				printe(' '.join(["'"+arg+"'" if ' ' in arg else arg for arg in self.command]))
 				process = Popen(self.command, universal_newlines=True)
 				process.wait()
 			finally:
@@ -191,8 +191,9 @@ class programs:
 				search = '$'+var
 				if val.find(search) != -1:
 					val = val.replace(search, self.replace_config_vars(var, tried))
-			val = val.replace('\\$', '$').replace('\\\\', '\\')
-			return expanduser(val)
+			val = expanduser(val)
+			val = val.replace('\\$', '$').replace('\\~', '~').replace('\\\\', '\\')
+			return val
 
 	class rsync(generic):
 		def __init__(self, config):
