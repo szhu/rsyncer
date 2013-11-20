@@ -6,9 +6,9 @@ if hasattr(__builtins__, 'raw_input'): input = __builtins__.raw_input
 
 # Options
 CONFIG_DIR = "~/.config/rsyncer"
-DEFAULT_CONFIG = {
+BUILTIN_DEFAULT_CONFIG = {
 	'rsync-single': 'rvut',
-	'rsync-double': [],
+	'rsync-double': [None],
 	'rsync-path': None,
 	'exclude-from': None,
 	'local': None,
@@ -58,31 +58,42 @@ def get_main_config():
 			msg = 'Error parsing %s:\n %s' % (config_filename, exc)
 			raise ConfigParseError(msg, config_filename, exc)
 
-def get_config(name, main_config, tried=None):
+def get_config(name, main_config, tried=None, optional=False, use_default=True):
 
-	if tried == None: tried = []
-	elif name in tried: raise CircularReferenceError('the following configurations reference each other: ' + ', '.join(tried))
+	if tried is None: tried = []
+	elif name in tried:
+		raise CircularReferenceError('the following configurations reference each other: ' + ', '.join(tried))
 	tried.append(name)
 
 	from json import loads
 	from os.path import exists
 	if name in main_config:
-		config_nondefault = main_config[name]
+		config_user = main_config[name]
 	else:
 		config_filename = get_config_filename(name)
-		if not exists(config_filename):
+		if exists(config_filename):
+			with open(config_filename) as f:
+				try:
+					config_user = loads(f.read())
+				except ValueError as exc:
+					msg = 'Error parsing %s:\n %s' % (config_filename, exc)
+					raise ConfigParseError(msg, config_filename, exc)
+		elif optional:
+			return None
+		else:
 			raise RsyncerError('configuration %r is not defined' % str(name))
-		with open(config_filename) as f:
-			try:
-				config_nondefault = loads(f.read())
-			except ValueError as exc:
-				msg = 'Error parsing %s:\n %s' % (config_filename, exc)
-				raise ConfigParseError(msg, config_filename, exc)
-	if 'extends' in config_nondefault:
-		config = get_config(config_nondefault['extends'], main_config, tried)
+	if 'extends' in config_user:
+		config = get_config(config_user['extends'], main_config, tried)
 	else:
-		config = dict(DEFAULT_CONFIG)
-	update_config(config, config_nondefault)
+		config = BUILTIN_DEFAULT_CONFIG.copy()
+		if use_default:
+			config_default = get_config('default', main_config, tried, optional=True, use_default=False)
+			if config_default:
+				update_config(config, config_default)
+			else:
+				pass
+				# printe('warning: no default config')
+	update_config(config, config_user)
 	return config
 
 def update_config(config0, config1):
@@ -182,17 +193,20 @@ class programs:
 			val = self.config[key]
 			if not val or type(val) == list: return val
 
-			if tried == None: tried = []
+			if tried is None: tried = []
 			elif key in tried: raise CircularReferenceError('the following options reference each other: ' + ', '.join(tried))
 			tried.append(key)
 
 			from os.path import expanduser
-			for var in self.config:
+			# start matching from the longest strings possible
+			# by iterating vars in reverse order
+			vars = list(self.config.keys()); vars.sort()
+			for var in reversed(vars):
 				search = '$'+var
 				if val.find(search) != -1:
 					val = val.replace(search, self.replace_config_vars(var, tried))
 			val = expanduser(val)
-			val = val.replace('\\$', '$').replace('\\~', '~').replace('\\\\', '\\')
+			val = val.replace('$', '$\\').replace('\\~', '~').replace('\\\\', '\\')
 			return val
 
 	class rsync(generic):
