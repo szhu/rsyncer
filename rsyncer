@@ -7,8 +7,9 @@ if hasattr(__builtins__, 'raw_input'): input = __builtins__.raw_input
 # Options
 CONFIG_DIR = "~/.config/rsyncer"
 BUILTIN_DEFAULT_CONFIG = {
-	'rsync-single': 'rvut',
-	'rsync-double': [None],
+	'rsync-opts': 'rvut',
+	'rsync-args': [None],
+	'ssh-args': [None],
 	'rsync-path': None,
 	'exclude-from': None,
 	'local': None,
@@ -217,10 +218,10 @@ class programs:
 			self.init_program(['rsync'], config)
 			self.check_key('local')
 			self.check_key('remote')
-			self.append_from_config('rsync-single', prefix='-')
+			self.append_from_config('rsync-opts', prefix='-')
 			self.append_from_config('rsync-path', prefix_arg='--rsync-path')
 			self.append_from_config('exclude-from', prefix_arg='--exclude-from')
-			for arg in self.get_key('rsync-double'): self.append(arg)
+			for arg in self.get_key('rsync-args'): self.append(arg)
 			for arg in self.get_key('_options'): self.append(arg)
 
 		def get_remote(self): return self.get_key('remote', required=True)
@@ -246,6 +247,7 @@ class programs:
 		def __init__(self, config):
 			self.init_program(['ssh'], config)
 			self.append_from_config('host')
+			for arg in self.get_key('ssh-args'): self.append(arg)
 			for arg in self.get_key('_options'): self.append(arg)
 
 	class pwd(generic):

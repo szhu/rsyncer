@@ -67,7 +67,7 @@ Here's an example config at `~/.config/rsyncer/main.json`:
 			"host": "username@$server",
 			"server": "example.com",
 			"rsync-path": "/home/username/opt/rsync/bin/rsync",
-			"rsync-double": ["--copy-unsafe-links"]
+			"rsync-args": ["--copy-unsafe-links"]
 		},
 		"myweb": {
 			"extends": "server:example.com",
@@ -88,7 +88,7 @@ Here's an example config at `~/.config/rsyncer/main.json`:
 			"host": "$username@$server",
 			"remote": "$host:work",
 			"local": "~/Documents/School/cs/$username",
-			"rsync-double": ["--copy-unsafe-links"]
+			"rsync-args": ["--copy-unsafe-links"]
 		},
 		"cs61a": {
 			"extends": "server:cs.berkeley.edu",
