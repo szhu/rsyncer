@@ -45,16 +45,16 @@ def make_config_dir():
 
 def get_config_filename(name):
 	from os.path import expanduser, join
-	return join(expanduser(CONFIG_DIR), name+'.json')
+	return join(expanduser(CONFIG_DIR), name+'.yaml')
 
 def get_main_config():
-	from json import loads
+	from yaml import load
 	from os.path import exists
-	config_filename = get_config_filename('main')
+	config_filename = get_config_filename('hosts')
 	if not exists(config_filename): return
 	with open(config_filename) as f:
 		try:
-			return loads(f.read())
+			return load(f)
 		except ValueError as exc:
 			msg = 'Error parsing %s:\n %s' % (config_filename, exc)
 			raise ConfigParseError(msg, config_filename, exc)
@@ -66,23 +66,12 @@ def get_config(name, main_config, tried=None, optional=False, use_default=True):
 		raise CircularReferenceError('the following configurations reference each other: ' + ', '.join(tried))
 	tried.append(name)
 
-	from json import loads
-	from os.path import exists
 	if name in main_config:
 		config_user = main_config[name]
+	elif optional:
+		return None
 	else:
-		config_filename = get_config_filename(name)
-		if exists(config_filename):
-			with open(config_filename) as f:
-				try:
-					config_user = loads(f.read())
-				except ValueError as exc:
-					msg = 'Error parsing %s:\n %s' % (config_filename, exc)
-					raise ConfigParseError(msg, config_filename, exc)
-		elif optional:
-			return None
-		else:
-			raise RsyncerError('configuration %r is not defined' % str(name))
+		raise RsyncerError('configuration %r is not defined' % str(name))
 	if 'extends' in config_user:
 		config = get_config(config_user['extends'], main_config, tried)
 	else:
