@@ -239,6 +239,11 @@ class programs:
 			for arg in self.get_key('ssh-args'): self.append(arg)
 			for arg in self.get_key('_options'): self.append(arg)
 
+	class ssh_copy_id(generic):
+		def __init__(self, config):
+			self.init_program(['ssh-copy-id'], config)
+			self.append_from_config('host')
+
 	class pwd(generic):
 		def __init__(self, config):
 			self.init_program(None, config)
@@ -249,6 +254,7 @@ class programs:
 
 COMMANDS = {
 	'ssh': programs.ssh,
+	'ssh-copy-id': programs.ssh_copy_id,
 	'push': programs.push,
 	'pull': programs.pull,
 	'pwd': programs.pwd,
